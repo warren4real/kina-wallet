@@ -7,6 +7,7 @@ class TransferReceiptScreen extends StatelessWidget {
   final String phoneNumber;
   final double amount;
   final DateTime createdAt;
+  final String? reference;
 
   const TransferReceiptScreen({
     super.key,
@@ -14,14 +15,16 @@ class TransferReceiptScreen extends StatelessWidget {
     required this.phoneNumber,
     required this.amount,
     required this.createdAt,
+    this.reference,
   });
 
   @override
   Widget build(BuildContext context) {
-    final date = '${createdAt.day}/${createdAt.month}/${createdAt.year}';
+    final localTime = createdAt.toLocal();
+    final date = '${localTime.day}/${localTime.month}/${localTime.year}';
     final time =
-        '${createdAt.hour.toString().padLeft(2, '0')}:'
-        '${createdAt.minute.toString().padLeft(2, '0')}';
+        '${localTime.hour.toString().padLeft(2, '0')}:'
+        '${localTime.minute.toString().padLeft(2, '0')}';
 
     return Scaffold(
       appBar: AppBar(
@@ -40,10 +43,17 @@ class TransferReceiptScreen extends StatelessWidget {
               style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'No real money was sent or deducted.',
+            Text(
+              reference == null
+                  ? 'No real money was sent or deducted.'
+                  : 'Both demo accounts were updated. No real money moved.',
               textAlign: TextAlign.center,
             ),
+            if (reference != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: SelectableText(reference!),
+              ),
             const SizedBox(height: 24),
             Card(
               elevation: 0,
@@ -73,10 +83,11 @@ class TransferReceiptScreen extends StatelessWidget {
                     ),
                     const Divider(height: 32),
                     _ReceiptDetail(label: 'Recipient', value: recipientName),
-                    _ReceiptDetail(
-                      label: 'PNG mobile',
-                      value: '+675 $phoneNumber',
-                    ),
+                    if (phoneNumber.isNotEmpty)
+                      _ReceiptDetail(
+                        label: 'PNG mobile',
+                        value: '+675 $phoneNumber',
+                      ),
                     _ReceiptDetail(
                       label: 'Amount',
                       value: 'K ${amount.toStringAsFixed(2)}',
@@ -87,7 +98,9 @@ class TransferReceiptScreen extends StatelessWidget {
                       value: 'K ${amount.toStringAsFixed(2)}',
                     ),
                     _ReceiptDetail(
-                      label: 'Created on this device',
+                      label: reference == null
+                          ? 'Created on this device'
+                          : 'Recorded by server',
                       value: '$date at $time',
                     ),
                     const _ReceiptDetail(label: 'Status', value: 'Demo only'),
@@ -97,10 +110,10 @@ class TransferReceiptScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            const Text(
-              'This receipt is a preview and is not proof of payment. '
-              'The demo balance and Activity have been updated. '
-              'Demo data is saved on this device.',
+            Text(
+              reference == null
+                  ? 'This local demo receipt is not proof of payment. Sample data is saved on this device.'
+                  : 'This is a fictional account-to-account transfer. Both cloud histories share the same reference. No real payment provider is connected.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.black54, fontSize: 12),
             ),

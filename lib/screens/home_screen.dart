@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../widgets/cloud_wallet_status.dart';
 import '../models/wallet_store.dart';
+import '../models/transfer_notifications.dart';
 import '../models/profile_store.dart';
+import '../models/wallet_identity.dart';
+import '../models/sandbox_account_store.dart';
 import 'send_money_screen.dart';
 import 'all_services_screen.dart';
 import 'my_qr_screen.dart';
@@ -40,7 +44,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ListenableBuilder(
-                    listenable: profileStore,
+                    listenable: Listenable.merge([
+                      profileStore,
+                      transferNotifications,
+                      sandboxAccountStore,
+                      walletStore,
+                    ]),
                     builder: (context, child) => Row(
                       children: [
                         const CircleAvatar(
@@ -62,7 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(height: 3),
                               Text(
-                                profileStore.profile.name,
+                                WalletIdentity.current.name,
                                 style: const TextStyle(
                                   color: navy,
                                   fontWeight: FontWeight.w600,
@@ -80,7 +89,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             backgroundColor: const Color(0xFFE6EEFC),
                             foregroundColor: walletBlue,
                           ),
-                          icon: const Icon(Icons.notifications_outlined),
+                          icon: Badge(
+                            isLabelVisible:
+                                transferNotifications.unreadCount > 0,
+                            label: Text(
+                              transferNotifications.unreadCount > 99
+                                  ? '99+'
+                                  : '${transferNotifications.unreadCount}',
+                            ),
+                            child: const Icon(Icons.notifications_outlined),
+                          ),
                         ),
                       ],
                     ),
@@ -94,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  const CloudWalletStatus(),
                   const SizedBox(height: 18),
                   Container(
                     width: double.infinity,

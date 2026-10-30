@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/demo_transaction.dart';
 import '../models/wallet_store.dart';
 import '../widgets/wallet_design.dart';
+import '../widgets/cloud_wallet_status.dart';
 
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({super.key});
@@ -31,6 +32,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const CloudWalletStatus(),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 38),

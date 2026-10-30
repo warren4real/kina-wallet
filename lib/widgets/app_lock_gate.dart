@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/pin_lock_store.dart';
-import '../models/profile_store.dart';
+import '../models/wallet_identity.dart';
 import 'wallet_design.dart';
 import 'wallet_logo.dart';
 import 'pin_keypad.dart';
@@ -403,10 +403,7 @@ class _PinScreenState extends State<_PinScreen> {
     final confirming = !store.hasPin && _firstPin != null;
     final waiting = store.retrySeconds > 0;
     final choices = ready && store.hasPin && !_showPin;
-    final phone = profileStore.profile.phoneNumber;
-    final maskedPhone = phone.length >= 4
-        ? '+675 •••• ${phone.substring(phone.length - 4)}'
-        : 'Your demo wallet';
+    final maskedPhone = WalletIdentity.current.lockedLabel;
     if (ready && !choices) {
       return _pinEntry(context, maskedPhone, confirming, waiting);
     }

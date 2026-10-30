@@ -40,6 +40,8 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   cryptography: ^2.9.0
   local_auth: ^3.0.2
+  supabase_flutter: 2.18.3
+  app_links: 7.2.2
 
 dev_dependencies:
   flutter_test:
@@ -56,6 +58,7 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
+  shared_preferences_platform_interface: any
 flutter:
 
   # The following line ensures that the Material Icons font is

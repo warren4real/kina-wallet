@@ -69,9 +69,11 @@ class _ElectricityScreenState extends State<ElectricityScreen> {
     );
 
     if (!mounted) return;
-    setState(() => _reviewOpen = false);
-
-    if (confirmed != true) return;
+    if (confirmed != true || _paid) {
+      setState(() => _reviewOpen = false);
+      return;
+    }
+    // Keep the review guard held until the saved result is known.
 
     final error = await walletStore.payDemoElectricity(
       meterNumber: meter,
@@ -79,6 +81,7 @@ class _ElectricityScreenState extends State<ElectricityScreen> {
     );
 
     if (!mounted) return;
+    setState(() => _reviewOpen = false);
 
     if (error != null) {
       ScaffoldMessenger.of(context)

@@ -16,10 +16,7 @@ void main() {
     expect(find.text('K 1250.00'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.person_outline).last);
     await tester.pumpAndSettle();
-    expect(
-      find.text('No registration or verification completed'),
-      findsOneWidget,
-    );
+    expect(find.text('No identity verification completed'), findsOneWidget);
   });
 
   testWidgets(
@@ -28,10 +25,13 @@ void main() {
       await tester.pumpWidget(const TestWalletApp());
       await tester.tap(find.byTooltip('Notifications'));
       await tester.pumpAndSettle();
-      expect(find.text('No notifications yet'), findsOneWidget);
+      expect(
+        find.text('Sign in to see transfer notifications'),
+        findsOneWidget,
+      );
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      expect(find.text('No notifications yet'), findsNothing);
+      expect(find.text('Sign in to see transfer notifications'), findsNothing);
 
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('services-view-all')).hitTestable(),

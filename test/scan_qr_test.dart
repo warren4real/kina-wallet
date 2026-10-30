@@ -1,6 +1,10 @@
 import 'dart:async';
 
 import 'support/test_app.dart';
+import 'pin_lock_test.dart' show MemoryPinStorage, fakeDerive, NoBiometrics;
+
+import 'package:kina_wallet/models/pin_lock_store.dart';
+import 'package:kina_wallet/widgets/app_lock_gate.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +63,63 @@ void main() {
   });
 
   testWidgets(
+    'Scanner stays stopped behind the expired app lock and resumes after PIN unlock',
+    (tester) async {
+      var now = DateTime(2026, 10, 29);
+      final lock = PinLockStore(
+        storage: MemoryPinStorage(),
+        derive: fakeDerive,
+        biometrics: NoBiometrics(),
+        now: () => now,
+      );
+      await lock.initialize();
+      await lock.createPin('123456', '123456');
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (_, child) => AppLockGate(store: lock, child: child!),
+          home: const ScanQrScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final scanner = tester.widget<MobileScanner>(find.byType(MobileScanner));
+      expect(scanner.controller!.value.isRunning, isTrue);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+      now = now.add(const Duration(seconds: 31));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(lock.unlocked, isFalse);
+      expect(scanner.controller!.value.isRunning, isFalse);
+      camera.captures.add(
+        BarcodeCapture(
+          barcodes: [
+            Barcode(
+              rawValue: DemoQr.encode(
+                const Recipient(
+                  name: 'Locked recipient',
+                  phoneNumber: '71234567',
+                ),
+              ),
+              format: BarcodeFormat.qrCode,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome back'), findsOneWidget);
+      await lock.unlock('123456');
+      await tester.pumpAndSettle();
+      expect(scanner.controller!.value.isRunning, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      lock.dispose();
+    },
+  );
+
+  testWidgets(
     'Bottom Scan QR opens camera and returns to the selected History tab',
     (tester) async {
       await tester.pumpWidget(const TestWalletApp());
@@ -103,7 +164,7 @@ void main() {
       await tester.tap(find.text('Profile'));
       await tester.pumpAndSettle();
       expect(
-        find.text('No registration or verification completed'),
+        find.text('No identity verification completed'),
         findsOneWidget,
       );
       await tester.tap(find.text('Home'));

@@ -1,15 +1,33 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/recipient.dart';
 import '../models/recipient_store.dart';
+import '../models/cloud_wallet.dart';
 
-class SavedRecipientsScreen extends StatelessWidget {
-  const SavedRecipientsScreen({super.key});
+class SavedRecipientsScreen extends StatefulWidget {
+  const SavedRecipientsScreen({super.key, this.store});
+  final RecipientStore? store;
+  @override
+  State<SavedRecipientsScreen> createState() => _SavedRecipientsScreenState();
+}
+
+class _SavedRecipientsScreenState extends State<SavedRecipientsScreen> {
+  RecipientStore get store => widget.store ?? recipientStore;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(store.refresh());
+    });
+  }
 
   Future<void> _openForm(BuildContext context, {Recipient? recipient}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => AddRecipientScreen(recipient: recipient),
+        builder: (_) => AddRecipientScreen(recipient: recipient, store: store),
       ),
     );
   }
@@ -41,7 +59,7 @@ class SavedRecipientsScreen extends StatelessWidget {
 
     if (!context.mounted || confirmed != true) return;
 
-    final error = await recipientStore.removeRecipient(
+    final error = await store.removeRecipient(
       phoneNumber: recipient.phoneNumber,
     );
 
@@ -58,6 +76,12 @@ class SavedRecipientsScreen extends StatelessWidget {
         title: const Text('Saved Recipients'),
         actions: [
           IconButton(
+            tooltip: 'Refresh recipients',
+            onPressed: store.refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+
+          IconButton(
             tooltip: 'Add recipient',
             onPressed: () => _openForm(context),
             icon: const Icon(Icons.person_add_outlined),
@@ -66,9 +90,29 @@ class SavedRecipientsScreen extends StatelessWidget {
       ),
       body: SafeArea(
         child: ListenableBuilder(
-          listenable: recipientStore,
+          listenable: store,
           builder: (context, child) {
-            final recipients = recipientStore.recipients;
+            final recipients = store.recipients;
+            if (store.loading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (store.isCloud && store.error != null) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(store.error!, textAlign: TextAlign.center),
+                      TextButton(
+                        onPressed: store.refresh,
+                        child: const Text('Refresh recipients'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
 
             if (recipients.isEmpty) {
               return Center(
@@ -159,17 +203,20 @@ class SavedRecipientsScreen extends StatelessWidget {
 class AddRecipientScreen extends StatefulWidget {
   // Null means adding; an existing recipient means editing.
   final Recipient? recipient;
+  final RecipientStore? store;
 
-  const AddRecipientScreen({super.key, this.recipient});
+  const AddRecipientScreen({super.key, this.recipient, this.store});
 
   @override
   State<AddRecipientScreen> createState() => _AddRecipientScreenState();
 }
 
 class _AddRecipientScreenState extends State<AddRecipientScreen> {
+  RecipientStore get store => widget.store ?? recipientStore;
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _receivingCodeController = TextEditingController();
 
   bool _saving = false;
 
@@ -184,6 +231,7 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
     if (recipient != null) {
       _nameController.text = recipient.name;
       _phoneController.text = recipient.phoneNumber;
+      _receivingCodeController.text = recipient.accountId ?? '';
     }
   }
 
@@ -191,6 +239,7 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _receivingCodeController.dispose();
     super.dispose();
   }
 
@@ -205,15 +254,17 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
     final original = widget.recipient;
 
     if (original == null) {
-      error = await recipientStore.addRecipient(
+      error = await store.addRecipient(
         name: _nameController.text,
         phoneNumber: _phoneController.text,
+        receivingAccountId: _receivingCodeController.text,
       );
     } else {
-      error = await recipientStore.updateRecipient(
+      error = await store.updateRecipient(
         originalPhoneNumber: original.phoneNumber,
         name: _nameController.text,
         phoneNumber: _phoneController.text,
+        receivingAccountId: _receivingCodeController.text,
       );
     }
 
@@ -263,7 +314,9 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(labelText: 'Recipient name'),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty ||
+                      value.trim().length > 80) {
                     return 'Enter the recipient’s name';
                   }
 
@@ -292,6 +345,25 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
                 },
                 onFieldSubmitted: (_) => _saveRecipient(),
               ),
+              if (store.isCloud) ...[
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _receivingCodeController,
+                  enabled: !_saving,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Receiving code (optional)',
+                    helperText:
+                        'Required when sending to a cloud demo account.',
+                  ),
+                  validator: (value) =>
+                      value == null ||
+                          value.trim().isEmpty ||
+                          isReceivingCode(value.trim())
+                      ? null
+                      : 'Enter a valid receiving account code',
+                ),
+              ],
               const SizedBox(height: 28),
               FilledButton(
                 onPressed: _saving ? null : _saveRecipient,

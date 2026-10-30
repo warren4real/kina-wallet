@@ -3,7 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/demo_qr.dart';
+import 'sandbox_account_screen.dart';
 import '../models/profile_store.dart';
+import '../models/wallet_identity.dart';
+import '../models/recipient.dart';
+import '../models/wallet_store.dart';
+import '../models/sandbox_account_store.dart';
 
 class MyQrScreen extends StatelessWidget {
   const MyQrScreen({super.key});
@@ -11,9 +16,52 @@ class MyQrScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: profileStore,
+      listenable: Listenable.merge([
+        profileStore,
+        sandboxAccountStore,
+        walletStore,
+      ]),
       builder: (context, child) {
-        final recipient = profileStore.profile;
+        final cloudAccount = sandboxAccountStore.account;
+        final recipient = walletStore.isCloud
+            ? Recipient(
+                name: WalletIdentity.current.name,
+                phoneNumber: cloudAccount?.id == walletStore.accountId
+                    ? (cloudAccount?.phoneNumber ?? '')
+                    : '',
+                accountId: walletStore.accountId,
+              )
+            : WalletIdentity.current.recipient;
+        if (recipient == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('My Demo QR')),
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.qr_code, size: 64),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Add a fictional PNG mobile number to your cloud profile to show your demo QR.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SandboxAccountScreen(),
+                        ),
+                      ),
+                      child: const Text('Edit cloud profile'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         final qrData = DemoQr.encode(recipient);
         return Scaffold(
           appBar: AppBar(title: const Text('My Demo QR')),
@@ -28,8 +76,7 @@ class MyQrScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'This code contains a fictional recipient’s '
-                  'name and mobile number.',
+                  'Share your receiving code or QR with another demo account. No real payments are connected.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 28),
@@ -74,20 +121,46 @@ class MyQrScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          '+675 ${recipient.phoneNumber}',
-                          textAlign: TextAlign.center,
-                        ),
+                        if (recipient.phoneNumber.isNotEmpty)
+                          Text(
+                            '+675 ${recipient.phoneNumber}',
+                            textAlign: TextAlign.center,
+                          ),
                       ],
                     ),
                   ),
                 ),
+                if (recipient.accountId != null) ...[
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Receiving account code',
+                    textAlign: TextAlign.center,
+                  ),
+                  SelectableText(
+                    recipient.accountId!,
+                    textAlign: TextAlign.center,
+                    key: const ValueKey('my-receiving-code'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: recipient.accountId!),
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Receiving code copied'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy receiving code'),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 const Text(
-                  'DEMO ONLY · No real receiving account is linked. '
-                  'This code does not transfer money. '
-                  'It uses our prototype format, not a bank '
-                  'or another wallet’s QR format.',
+                  'DEMO ONLY · This prototype QR is not a bank or another wallet’s QR format. Scanning prepares a transfer; confirmation is required. All funds are fictional.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.black54, fontSize: 12),
                 ),

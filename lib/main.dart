@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'models/wallet_store.dart';
@@ -10,6 +12,9 @@ import 'screens/all_services_screen.dart';
 import 'models/recipient_store.dart';
 import 'models/pin_lock_store.dart';
 import 'widgets/app_lock_gate.dart';
+import 'widgets/live_wallet_updates.dart';
+import 'services/sandbox_supabase.dart';
+import 'screens/reset_password_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +22,7 @@ Future<void> main() async {
     await walletStore.initialize();
     await recipientStore.initialize();
     await profileStore.initialize();
+    await initializeSandboxAccounts();
     runApp(const KinaWalletApp());
   } catch (error) {
     debugPrint('Demo wallet could not load: $error');
@@ -179,8 +185,10 @@ class KinaWalletApp extends StatelessWidget {
           ),
         ),
       ),
-      builder: (context, child) =>
-          AppLockGate(store: lockStore ?? pinLockStore, child: child!),
+      builder: (context, child) => AppLockGate(
+        store: lockStore ?? pinLockStore,
+        child: LiveWalletUpdates(child: AccountRecoveryGate(child: child!)),
+      ),
       home: const WalletShell(),
     );
   }
@@ -193,8 +201,42 @@ class WalletShell extends StatefulWidget {
   State<WalletShell> createState() => _WalletShellState();
 }
 
-class _WalletShellState extends State<WalletShell> {
+class _WalletShellState extends State<WalletShell> with WidgetsBindingObserver {
   int selectedTab = 0;
+  String? _walletAccount;
+  @override
+  void initState() {
+    super.initState();
+    _walletAccount = walletStore.accountId;
+    WidgetsBinding.instance.addObserver(this);
+    walletStore.addListener(_walletChanged);
+  }
+
+  void _walletChanged() {
+    if (_walletAccount == walletStore.accountId) return;
+    _walletAccount = walletStore.accountId;
+    // Discard forms and receipts from the old wallet before a new one is used.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      setState(() => selectedTab = 0);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(walletStore.refreshCloud());
+      unawaited(recipientStore.refresh());
+    }
+  }
+
+  @override
+  void dispose() {
+    walletStore.removeListener(_walletChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

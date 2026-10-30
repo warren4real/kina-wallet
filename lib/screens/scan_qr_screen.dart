@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/qr_scan_gate.dart';
+import '../models/pin_lock_store.dart';
+import '../widgets/app_lock_gate.dart';
 import 'send_money_screen.dart';
 import 'paste_demo_qr_screen.dart';
 
@@ -16,17 +18,45 @@ class ScanQrScreen extends StatefulWidget {
 class _ScanQrScreenState extends State<ScanQrScreen>
     with WidgetsBindingObserver {
   final _controller = MobileScannerController(
+    autoStart: false,
     formats: [BarcodeFormat.qrCode],
     detectionSpeed: DetectionSpeed.normal,
   );
   final _gate = QrScanGate();
   String? _message;
   bool _retrying = false;
+  PinLockStore? _lockStore;
+  bool _foreground = true;
+
+  bool get _canScan => mounted && _foreground && (_lockStore?.unlocked ?? true);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final store = context.findAncestorWidgetOfExactType<AppLockGate>()?.store;
+    if (store != _lockStore) {
+      _lockStore?.removeListener(_syncCamera);
+      _lockStore = store;
+      _lockStore?.addListener(_syncCamera);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncCamera());
+  }
+
+  void _syncCamera() {
+    if (!mounted) return;
+    if (!_canScan) {
+      unawaited(_stop());
+    } else if (!_gate.claimed && !_retrying && !_controller.value.isRunning) {
+      unawaited(_retry());
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
   }
 
   Future<void> _stop() async {
@@ -38,13 +68,16 @@ class _ScanQrScreenState extends State<ScanQrScreen>
   }
 
   Future<void> _retry() async {
-    if (_retrying) return;
+    if (_retrying || !_canScan) return;
     setState(() => _retrying = true);
     try {
       await _stop();
+      if (!_canScan) return;
       _gate.reset();
       if (mounted) setState(() => _message = null);
       await _controller.start();
+      // A lock/background event may arrive while native startup is pending.
+      if (!_canScan) await _stop();
     } on MobileScannerException catch (error) {
       if (mounted) setState(() => _message = _cameraMessage(error));
     } catch (_) {
@@ -60,7 +93,7 @@ class _ScanQrScreenState extends State<ScanQrScreen>
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (!mounted || _gate.claimed || _retrying) return;
+    if (!_canScan || _gate.claimed || _retrying) return;
     final codes = capture.barcodes
         .where(
           (code) =>
@@ -72,7 +105,7 @@ class _ScanQrScreenState extends State<ScanQrScreen>
       final recipient = _gate.accept(codes.first.rawValue!);
       if (recipient == null) return;
       await _stop();
-      if (!mounted) return;
+      if (!mounted || !_canScan) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
           builder: (_) => SendMoneyScreen(initialRecipient: recipient),
@@ -120,17 +153,14 @@ class _ScanQrScreenState extends State<ScanQrScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!_controller.value.hasCameraPermission) return;
-    if (state == AppLifecycleState.resumed && !_gate.claimed && !_retrying) {
-      unawaited(_retry());
-    } else if (state != AppLifecycleState.resumed) {
-      unawaited(_stop());
-    }
+    _foreground = state == AppLifecycleState.resumed;
+    _syncCamera();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _lockStore?.removeListener(_syncCamera);
     unawaited(_controller.dispose());
     super.dispose();
   }
